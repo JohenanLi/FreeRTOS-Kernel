@@ -96,12 +96,14 @@
 #define heapBITS_PER_BYTE         ( ( size_t ) 8 )
 
 /* Max value that fits in a size_t type. */
+// size_t类型的最大值，0全部取反
 #define heapSIZE_MAX              ( ~( ( size_t ) 0 ) )
 
 /* Check if multiplying a and b will result in overflow. */
 #define heapMULTIPLY_WILL_OVERFLOW( a, b )     ( ( ( a ) > 0 ) && ( ( b ) > ( heapSIZE_MAX / ( a ) ) ) )
 
 /* Check if adding a and b will result in overflow. */
+// 判断a+b是否会大于最大值，等式移动等价于a+b>heapSIZE_MAX
 #define heapADD_WILL_OVERFLOW( a, b )          ( ( a ) > ( heapSIZE_MAX - ( b ) ) )
 
 /* Check if the subtraction operation ( a - b ) will result in underflow. */
@@ -207,14 +209,17 @@ PRIVILEGED_DATA static size_t xNumberOfSuccessfulFrees = ( size_t ) 0U;
 
 void * pvPortMalloc( size_t xWantedSize )
 {
+    //定义当前块、前一块、新块头指针
     BlockLink_t * pxBlock;
     BlockLink_t * pxPreviousBlock;
     BlockLink_t * pxNewBlockLink;
+    //定义返回指针、额外所需大小
     void * pvReturn = NULL;
     size_t xAdditionalRequiredSize;
 
     /* The heap must be initialised before the first call to
      * pvPortMalloc(). */
+    //堆必须在第一次调用pvPortMalloc()之前初始化
     configASSERT( pxEnd );
 
     if( xWantedSize > 0 )
