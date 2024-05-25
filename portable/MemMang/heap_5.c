@@ -114,6 +114,7 @@
  * an BlockLink_t structure is set then the block belongs to the application.
  * When the bit is free the block is still part of the free heap space. */
 #define heapBLOCK_ALLOCATED_BITMASK    ( ( ( size_t ) 1 ) << ( ( sizeof( size_t ) * heapBITS_PER_BYTE ) - 1 ) )
+// 最高位为1已经分配时，返回0，未分配时返回1
 #define heapBLOCK_SIZE_IS_VALID( xBlockSize )    ( ( ( xBlockSize ) & heapBLOCK_ALLOCATED_BITMASK ) == 0 )
 #define heapBLOCK_IS_ALLOCATED( pxBlock )        ( ( ( pxBlock->xBlockSize ) & heapBLOCK_ALLOCATED_BITMASK ) != 0 )
 #define heapALLOCATE_BLOCK( pxBlock )            ( ( pxBlock->xBlockSize ) |= heapBLOCK_ALLOCATED_BITMASK )
@@ -181,6 +182,7 @@ void vPortDefineHeapRegions( const HeapRegion_t * const pxHeapRegions ) PRIVILEG
 
 /* The size of the structure placed at the beginning of each allocated memory
  * block must by correctly byte aligned. */
+// xHeapStructSize是BlockLink_t结构体的大小，加上对齐的字节数，这里计算值算为16
 static const size_t xHeapStructSize = ( sizeof( BlockLink_t ) + ( ( size_t ) ( portBYTE_ALIGNMENT - 1 ) ) ) & ~( ( size_t ) portBYTE_ALIGNMENT_MASK );
 
 /* Create a couple of list links to mark the start and end of the list. */
@@ -221,13 +223,14 @@ void * pvPortMalloc( size_t xWantedSize )
      * pvPortMalloc(). */
     //堆必须在第一次调用pvPortMalloc()之前初始化
     configASSERT( pxEnd );
-
+    // 这一部分代码是为了保证xWantedSize是对齐的，且进行溢出判断
     if( xWantedSize > 0 )
     {
         /* The wanted size must be increased so it can contain a BlockLink_t
          * structure in addition to the requested amount of bytes. */
         if( heapADD_WILL_OVERFLOW( xWantedSize, xHeapStructSize ) == 0 )
         {
+            
             xWantedSize += xHeapStructSize;
 
             /* Ensure that blocks are always aligned to the required number
@@ -235,12 +238,14 @@ void * pvPortMalloc( size_t xWantedSize )
             if( ( xWantedSize & portBYTE_ALIGNMENT_MASK ) != 0x00 )
             {
                 /* Byte alignment required. */
+                // 比如xWantedSize=21，portBYTE_ALIGNMENT=8，xWantedSize & portBYTE_ALIGNMENT_MASK=5,xAdditionalRequiredSize=3
                 xAdditionalRequiredSize = portBYTE_ALIGNMENT - ( xWantedSize & portBYTE_ALIGNMENT_MASK );
-
+                // 如果xWantedSize + xAdditionalRequiredSize不会溢出，那么加上额外的对齐字节数使得对齐
                 if( heapADD_WILL_OVERFLOW( xWantedSize, xAdditionalRequiredSize ) == 0 )
                 {
                     xWantedSize += xAdditionalRequiredSize;
                 }
+                // 如果溢出了，那么xWantedSize=0,那么pvReturn=NULL
                 else
                 {
                     xWantedSize = 0;
@@ -267,13 +272,17 @@ void * pvPortMalloc( size_t xWantedSize )
          * top bit is set.  The top bit of the block size member of the BlockLink_t
          * structure is used to determine who owns the block - the application or
          * the kernel, so it must be free. */
+        // 判断最高位是否被设置，heapBLOCK_ALLOCATED_BITMASK为1<<31，最高位为1已经分配时，返回0，未分配时返回1；所以这里返回的为0时，不能继续，为1时继续。但是这里的xWantedSize是对齐的且不会溢出，所以xWantedSize的最高位一定是0
         if( heapBLOCK_SIZE_IS_VALID( xWantedSize ) != 0 )
         {
+            // 判断需要的字节数是否在范围内
             if( ( xWantedSize > 0 ) && ( xWantedSize <= xFreeBytesRemaining ) )
             {
                 /* Traverse the list from the start (lowest address) block until
                  * one of adequate size is found. */
+                // 从链表头开始寻找
                 pxPreviousBlock = &xStart;
+                // 
                 pxBlock = heapPROTECT_BLOCK_POINTER( xStart.pxNextFreeBlock );
                 heapVALIDATE_BLOCK_POINTER( pxBlock );
 
