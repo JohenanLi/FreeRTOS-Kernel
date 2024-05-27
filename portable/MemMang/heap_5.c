@@ -282,10 +282,10 @@ void * pvPortMalloc( size_t xWantedSize )
                  * one of adequate size is found. */
                 // 从链表头开始寻找
                 pxPreviousBlock = &xStart;
-                // 
+                // 获取并验证
                 pxBlock = heapPROTECT_BLOCK_POINTER( xStart.pxNextFreeBlock );
                 heapVALIDATE_BLOCK_POINTER( pxBlock );
-
+                // while循环遍历链表，找到一个大于等于xWantedSize的块
                 while( ( pxBlock->xBlockSize < xWantedSize ) && ( pxBlock->pxNextFreeBlock != heapPROTECT_BLOCK_POINTER( NULL ) ) )
                 {
                     pxPreviousBlock = pxBlock;
@@ -299,32 +299,41 @@ void * pvPortMalloc( size_t xWantedSize )
                 {
                     /* Return the memory space pointed to - jumping over the
                      * BlockLink_t structure at its start. */
+                    // 返回的指针是block地址+BlockLink_t结构体大小
                     pvReturn = ( void * ) ( ( ( uint8_t * ) heapPROTECT_BLOCK_POINTER( pxPreviousBlock->pxNextFreeBlock ) ) + xHeapStructSize );
                     heapVALIDATE_BLOCK_POINTER( pvReturn );
 
                     /* This block is being returned for use so must be taken out
                      * of the list of free blocks. */
+                    // 从链表中移除，pre块和next块相连
                     pxPreviousBlock->pxNextFreeBlock = pxBlock->pxNextFreeBlock;
 
                     /* If the block is larger than required it can be split into
                      * two. */
+                    // 再次验证大小是否合适
                     configASSERT( heapSUBTRACT_WILL_UNDERFLOW( pxBlock->xBlockSize, xWantedSize ) == 0 );
-
+                    // 如果大小大于所需大小+最小块大小(xHeapStructSize << 1这里是32)，那么将剩余的部分分割出来
                     if( ( pxBlock->xBlockSize - xWantedSize ) > heapMINIMUM_BLOCK_SIZE )
                     {
                         /* This block is to be split into two.  Create a new
                          * block following the number of bytes requested. The void
                          * cast is used to prevent byte alignment warnings from the
                          * compiler. */
+                        // 新块的地址是当前块地址+所需大小
                         pxNewBlockLink = ( void * ) ( ( ( uint8_t * ) pxBlock ) + xWantedSize );
+                        // 对齐检查
                         configASSERT( ( ( ( size_t ) pxNewBlockLink ) & portBYTE_ALIGNMENT_MASK ) == 0 );
 
                         /* Calculate the sizes of two blocks split from the
                          * single block. */
+                        
+                        // 新块大小=当前块大小-所需大小
                         pxNewBlockLink->xBlockSize = pxBlock->xBlockSize - xWantedSize;
+                        // 当前块大小=所需大小
                         pxBlock->xBlockSize = xWantedSize;
 
                         /* Insert the new block into the list of free blocks. */
+                        // 插入新块,位置是原来块的位置，链接起来
                         pxNewBlockLink->pxNextFreeBlock = pxPreviousBlock->pxNextFreeBlock;
                         pxPreviousBlock->pxNextFreeBlock = heapPROTECT_BLOCK_POINTER( pxNewBlockLink );
                     }
@@ -332,7 +341,7 @@ void * pvPortMalloc( size_t xWantedSize )
                     {
                         mtCOVERAGE_TEST_MARKER();
                     }
-
+                    // 修改剩余字节
                     xFreeBytesRemaining -= pxBlock->xBlockSize;
 
                     if( xFreeBytesRemaining < xMinimumEverFreeBytesRemaining )
@@ -346,6 +355,7 @@ void * pvPortMalloc( size_t xWantedSize )
 
                     /* The block is being returned - it is allocated and owned
                      * by the application and has no "next" block. */
+                    // 掩码添加到最高位作为已分配
                     heapALLOCATE_BLOCK( pxBlock );
                     pxBlock->pxNextFreeBlock = NULL;
                     xNumberOfSuccessfulAllocations++;
